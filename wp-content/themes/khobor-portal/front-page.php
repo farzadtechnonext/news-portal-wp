@@ -15,6 +15,9 @@ $lead_query = new WP_Query( array(
 $lead_posts = $lead_query->posts;
 $lead_ids   = wp_list_pluck( $lead_posts, 'ID' );
 $categories = khobor_portal_get_categories();
+$section_settings = get_option( 'khobor_portal_homepage_sections', array() );
+$curated_sections = isset( $section_settings['curated'] ) && is_array( $section_settings['curated'] ) ? $section_settings['curated'] : array();
+$selected_sections = isset( $section_settings['posts'] ) && is_array( $section_settings['posts'] ) ? $section_settings['posts'] : array();
 ?>
 <main class="site-shell page-content">
 	<?php if ( ! empty( $lead_posts ) ) : ?>
@@ -128,23 +131,63 @@ $categories = khobor_portal_get_categories();
 							<a href="<?php echo esc_url( get_category_link( $category->term_id ) ); ?>"><?php esc_html_e( 'সব খবর', 'khobor-portal' ); ?> →</a>
 						</div>
 						<?php
-						$category_query = new WP_Query( array(
-							'cat'                 => $category->term_id,
-							'posts_per_page'      => -1,
-							'ignore_sticky_posts' => true,
-						) );
+						$category_id = (int) $category->term_id;
+						$is_curated  = ! empty( $curated_sections[ $category_id ] );
+						$category_posts = array();
+
+						if ( $is_curated ) {
+							$selected_ids = isset( $selected_sections[ $category_id ] ) && is_array( $selected_sections[ $category_id ] )
+								? array_values( array_filter( array_map( 'absint', $selected_sections[ $category_id ] ) ) )
+								: array();
+
+							if ( $selected_ids ) {
+								$category_query = new WP_Query( array(
+									'cat'                 => $category_id,
+									'post__in'            => $selected_ids,
+									'orderby'             => 'post__in',
+									'posts_per_page'      => count( $selected_ids ),
+									'ignore_sticky_posts' => true,
+								) );
+								$category_posts = $category_query->posts;
+							}
+						} else {
+							$category_query = new WP_Query( array(
+								'cat'                 => $category_id,
+								'posts_per_page'      => -1,
+								'ignore_sticky_posts' => true,
+							) );
+							$category_posts = $category_query->posts;
+						}
 						?>
-						<?php if ( $category_query->have_posts() ) : ?>
-							<?php while ( $category_query->have_posts() ) : $category_query->the_post(); ?>
-								<article class="category-item">
-									<a class="story-image" href="<?php the_permalink(); ?>" aria-label="<?php the_title_attribute(); ?>"><?php echo wp_kses_post( khobor_portal_post_image( get_the_ID(), 'medium' ) ); ?></a>
-									<h3><a href="<?php the_permalink(); ?>"><?php the_title(); ?></a></h3>
-								</article>
-							<?php endwhile; ?>
+						<?php if ( $category_posts ) : ?>
+							<div class="category-story-grid">
+								<div class="category-column">
+									<?php if ( isset( $category_posts[0] ) ) : ?>
+										<?php get_template_part( 'template-parts/category-story', null, array( 'post_id' => $category_posts[0]->ID, 'variant' => 'feature' ) ); ?>
+									<?php endif; ?>
+									<?php foreach ( array_slice( $category_posts, 1, 2 ) as $category_post ) : ?>
+										<?php get_template_part( 'template-parts/category-story', null, array( 'post_id' => $category_post->ID, 'variant' => 'compact' ) ); ?>
+									<?php endforeach; ?>
+								</div>
+								<div class="category-column">
+									<?php foreach ( array_slice( $category_posts, 3, 2 ) as $category_post ) : ?>
+										<?php get_template_part( 'template-parts/category-story', null, array( 'post_id' => $category_post->ID, 'variant' => 'compact' ) ); ?>
+									<?php endforeach; ?>
+									<?php if ( isset( $category_posts[5] ) ) : ?>
+										<?php get_template_part( 'template-parts/category-story', null, array( 'post_id' => $category_posts[5]->ID, 'variant' => 'feature' ) ); ?>
+									<?php endif; ?>
+								</div>
+								<div class="category-column category-column--right">
+									<?php foreach ( array_slice( $category_posts, 6 ) as $category_post ) : ?>
+										<?php get_template_part( 'template-parts/category-story', null, array( 'post_id' => $category_post->ID, 'variant' => 'compact' ) ); ?>
+									<?php endforeach; ?>
+								</div>
+							</div>
+						<?php elseif ( $is_curated ) : ?>
+							<p><?php esc_html_e( 'No posts have been selected for this section yet.', 'khobor-portal' ); ?></p>
 						<?php else : ?>
 							<p><?php esc_html_e( 'এই বিভাগে নতুন খবর আসছে।', 'khobor-portal' ); ?></p>
 						<?php endif; ?>
-						<?php wp_reset_postdata(); ?>
 					</section>
 				<?php endforeach; ?>
 			</div>
